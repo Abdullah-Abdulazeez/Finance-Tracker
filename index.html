@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="financeApp">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Tracker</title>
+
+    <!-- Link to custom CSS for styling -->
+    <link rel="stylesheet" href="Finance-Tracker stlye.css">
+
+    <!-- Chart.js -->
+    <script src="js/chart.umd.js"></script>
+
+    <!-- AngularJS -->
+    <script src="js/angular.min.js"></script>
+
+    <!-- Your custom AngularJS app and controller -->
+    <script src="js/Finance-Tracker app.js"></script>
+
+</head>
+
+<body ng-controller="financeController">
+    <div class="container">
+        <h1>Finance Tracker</h1>
+
+        <!-- Monthly Budget Input -->
+        <label for="budget">Set Monthly Budget:</label>
+        <input type="number" id="budget" ng-model="budget" ng-change="setBudget()" placeholder="Enter your budget">
+        <p>Monthly Budget: {{ budget | currency }}</p>
+
+        <!-- Add Expense Form -->
+        <h3>Add Expense</h3>
+        <input type="text" ng-model="newExpense.category" placeholder="Category" required>
+        <input type="number" ng-model="newExpense.amount" placeholder="Amount" required>
+        <button ng-click="addExpense()">Add Expense</button>
+
+        <!-- Clear Data Button -->
+        <button ng-click="clearData()">Clear Data</button>
+
+        <!-- Pie Chart for Expenses -->
+        <canvas id="expenseChart" width="400" height="400"></canvas>
+
+    </div>
+</body>
+
+</html>
