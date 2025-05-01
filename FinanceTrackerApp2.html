@@ -16,6 +16,10 @@
   <!-- Chart.js -->
   <script src="js/chart.umd.js"></script>
 
+  <!-- PapaParse -->
+<script src="js/papaparse.min.js"></script>
+
+
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -230,6 +234,12 @@
 
   <button ng-click="clearEverything()" class="btn btn-danger">Clear All Data (Includes Budget)</button>
   <button ng-click="clearTransactionsOnly()" class="btn btn-outline">Clear All Transactions (Keep Budget)</button>
+  <div style="margin-top: 15px;">
+    <label>Import Transactions from CSV</label>
+    <input type="file" id="csvFile" accept=".csv" />
+    <button class="btn" ng-click="importCSV()">Import CSV</button>
+  </div>
+  
 
   <script>
     angular.module('financeApp', [])
@@ -327,7 +337,44 @@
               }
             }
           });
-        };
+          $scope.importCSV = function () {
+  const fileInput = document.getElementById('csvFile');
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Please select a CSV file first.");
+    return;
+  }
+
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+      const data = results.data;
+      let addedCount = 0;
+
+      data.forEach(row => {
+        if (row.type && row.amount && row.description) {
+          const type = row.type.toLowerCase().trim();
+          const amount = parseFloat(row.amount);
+          const description = row.description.trim();
+
+          if ((type === 'income' || type === 'expense') && !isNaN(amount) && description) {
+            $scope.transactions.push({ type, amount, description });
+            addedCount++;
+          }
+        }
+      });
+
+      $scope.updateStorage();
+      $scope.$apply(); // Needed to reflect changes
+      alert(`✅ Imported ${addedCount} transactions from CSV.`);
+      },
+      error: function(err) {
+        alert("❌ Error parsing CSV: " + err.message);
+      }
+    });
+    };
+};
 
         // Init
         $scope.updateTotals();

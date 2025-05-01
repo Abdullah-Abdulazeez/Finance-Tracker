@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!--This is not the right code use the other one you can delete it if you want-->
 <html ng-app="financeApp">
 <head>
   <meta charset="UTF-8">
@@ -13,6 +12,12 @@
 
   <!-- AngularJS -->
   <script src="js/angular.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="js/chart.umd.js"></script>
+
+  <!-- PapaParse -->
+  <script src="js/papaparse.min.js"></script>
 
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -36,8 +41,7 @@
     .budget-box,
     .summary,
     .transaction,
-    .chart-wrapper,
-    .monthly-overview {
+    .chart-wrapper {
       background: white;
       border-radius: 12px;
       padding: 15px;
@@ -165,23 +169,6 @@
       font-weight: bold;
       color: #00695c;
     }
-
-    .monthly-overview table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-
-    .monthly-overview th, .monthly-overview td {
-      padding: 10px;
-      text-align: left;
-      border-bottom: 1px solid #ddd;
-    }
-
-    .monthly-overview th {
-      background-color: #4a148c;
-      color: white;
-    }
   </style>
 </head>
 <body ng-controller="FinanceController">
@@ -244,103 +231,141 @@
     <canvas id="myChart"></canvas>
   </div>
 
-  <button ng-click="clearAll()" class="btn btn-danger">Clear All</button>
-
-  <button ng-click="showMonthlyOverview()" class="btn btn-outline">📊 Monthly Overview</button>
-
-  <div class="monthly-overview" ng-show="monthlyData && Object.keys(monthlyData).length">
-    <h3>Monthly Overview</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Month</th>
-          <th>Total Income</th>
-          <th>Total Expenses</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr ng-repeat="(month, data) in monthlyData">
-          <td>{{ month }}</td>
-          <td>₦{{ data.income }}</td>
-          <td>₦{{ data.expense }}</td>
-        </tr>
-      </tbody>
-    </table>
+  <button ng-click="clearEverything()" class="btn btn-danger">Clear All Data (Includes Budget)</button>
+  <button ng-click="clearTransactionsOnly()" class="btn btn-outline">Clear All Transactions (Keep Budget)</button>
+  <div style="margin-top: 15px;">
+    <label>Import Transactions from CSV</label>
+    <input type="file" id="csvFile" accept=".csv" />
+    <button class="btn" ng-click="importCSV()">Import CSV</button>
   </div>
 
   <script>
     angular.module('financeApp', [])
       .controller('FinanceController', function($scope) {
-        $scope.transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+        const currentMonthYear = new Date().toLocaleString('default', { month: 'long', year: 'numeric' }).replace(',', '');
+        $scope.transactions = JSON.parse(localStorage.getItem(currentMonthYear)) || [];
         $scope.budget = parseFloat(localStorage.getItem('budget')) || null;
         $scope.type = 'income';
-        $scope.monthlyData = {};
 
+        // Save the budget to localStorage
         $scope.saveBudget = function () {
+          if (isNaN($scope.budget) || $scope.budget <= 0) {
+            alert("🚨 Invalid budget value! Please enter a positive number.");
+            return;
+          }
           localStorage.setItem('budget', $scope.budget);
         };
 
+        // Add new transaction with validation
         $scope.addTransaction = function () {
-          if (!$scope.amount || !$scope.description) return;
-          const transaction = {
+          if (!$scope.amount || isNaN($scope.amount) || $scope.amount <= 0 || !$scope.description) {
+            alert("🚨 Please provide valid amount and description!");
+            return;
+          }
+
+          $scope.transactions.push({
             type: $scope.type,
             amount: parseFloat($scope.amount),
-            description: $scope.description,
-            date: new Date()
-          };
-          $scope.transactions.push(transaction);
+            description: $scope.description
+          });
+
           $scope.amount = '';
           $scope.description = '';
           $scope.type = 'income';
           $scope.updateStorage();
+
+          // Check if over budget
+          if ($scope.budget && $scope.totalExpense > $scope.budget) {
+            alert("🚨 You've exceeded your monthly budget!");
+          }
         };
 
+        // Remove a transaction
         $scope.removeTransaction = function (index) {
           $scope.transactions.splice(index, 1);
           $scope.updateStorage();
         };
 
-        $scope.clearAll = function () {
-          if (confirm("Are you sure you want to clear all data?")) {
-            $scope.transactions = [];
-            $scope.budget = null;
-            localStorage.clear();
-            $scope.updateStorage();
-          }
+        // Clear all data
+        $scope.clearEverything = function () {
+          localStorage.clear(); // Completely clears local storage
+          $scope.transactions = [];
+          $scope.budget = null;
+          $scope.updateStorage();
+          alert("All data has been cleared.");
         };
 
-        $scope.showMonthlyOverview = function () {
-          $scope.monthlyData = {};
-
-          $scope.transactions.forEach(function (transaction) {
-            const month = transaction.date.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-            if (!$scope.monthlyData[month]) {
-              $scope.monthlyData[month] = { income: 0, expense: 0 };
-            }
-
-            if (transaction.type === 'income') {
-              $scope.monthlyData[month].income += transaction.amount;
-            } else {
-              $scope.monthlyData[month].expense += transaction.amount;
-            }
-          });
+        // Clear transactions but keep budget
+        $scope.clearTransactionsOnly = function () {
+          localStorage.removeItem(currentMonthYear); // Only remove transactions for the current month
+          $scope.transactions = [];
+          $scope.updateStorage();
         };
 
+        // Update storage with current transactions
         $scope.updateStorage = function () {
-          localStorage.setItem('transactions', JSON.stringify($scope.transactions));
-          localStorage.setItem('budget', $scope.budget);
+          localStorage.setItem(currentMonthYear, JSON.stringify($scope.transactions));
+          $scope.updateTotals();
+          $scope.drawChart();
         };
 
-        $scope.calculateBalance = function () {
-          $scope.totalIncome = $scope.transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-          $scope.totalExpense = $scope.transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+        // Update totals for income, expense, and balance
+        $scope.updateTotals = function () {
+          $scope.totalIncome = $scope.transactions.filter(t => t.type === 'income')
+            .reduce((sum, t) => sum + t.amount, 0);
+          $scope.totalExpense = $scope.transactions.filter(t => t.type === 'expense')
+            .reduce((sum, t) => sum + t.amount, 0);
           $scope.balance = $scope.totalIncome - $scope.totalExpense;
         };
 
-        $scope.$watch('transactions', function () {
-          $scope.calculateBalance();
-        }, true);
+        // Draw the chart
+        $scope.drawChart = function () {
+          const ctx = document.getElementById('myChart').getContext('2d');
+          const chartData = {
+            labels: ['Income', 'Expenses'],
+            datasets: [
+              {
+                label: 'Total',
+                data: [$scope.totalIncome, $scope.totalExpense],
+                backgroundColor: ['#81c784', '#ff7043'],
+              }
+            ]
+          };
+          new Chart(ctx, {
+            type: 'pie',
+            data: chartData
+          });
+        };
+
+        // Import transactions from CSV
+        $scope.importCSV = function () {
+          const fileInput = document.getElementById("csvFile");
+          const file = fileInput.files[0];
+
+          if (file && file.name.endsWith(".csv")) {
+            Papa.parse(file, {
+              complete: function (results) {
+                results.data.forEach(row => {
+                  const [type, amount, description] = row;
+                  if (type && !isNaN(amount) && description) {
+                    $scope.transactions.push({
+                      type: type.toLowerCase(),
+                      amount: parseFloat(amount),
+                      description
+                    });
+                  }
+                });
+                $scope.updateStorage();
+              }
+            });
+          } else {
+            alert("Please upload a valid CSV file.");
+          }
+        };
+
+        // Initialize totals and chart
+        $scope.updateTotals();
+        $scope.drawChart();
       });
   </script>
 
